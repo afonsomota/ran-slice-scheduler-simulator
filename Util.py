@@ -1,6 +1,6 @@
 from fractions import Fraction
 
-from NRTables import MCS, TBS, PC_TBS, MCS2CQI, PC_TBS_short
+from NRTables import MCS, TBS, PC_TBS, MCS2CQI, PC_TBS_short, PC_TBS_mini
 from scipy.stats import norm
 import math, statistics
 import numpy as np
@@ -9,11 +9,21 @@ from functools import reduce
 
 import Medium
 
+MINISLOT_DURATION = 1/7
+MINISLOT_COUNT = int(math.ceil(1/MINISLOT_DURATION))
+
 
 # used to generate PC_TBS
-def getTBSSize(mcs, rbs, nred=12 * 14, layers=1, dmrs=12):
-  npre = nred - dmrs
-  nre = min(npre, 156) * rbs
+def getTBSSize(mcs, rbs, nred=12 * 14, layers=1, dmrs=12, mini_slot=None):
+  if mini_slot is None:
+    npre = nred - dmrs
+    nre = min(npre, 156) * rbs
+  else:
+    if nred >= 12*2:
+      nred = 12*2
+    dmrs = 2
+    npre = nred - dmrs
+    nre = min(npre, 156) * rbs
   r = MCS[mcs]['R']
   qm = MCS[mcs]['Qm']
   ninfo = nre * (r / 1024) * qm * layers
@@ -45,8 +55,11 @@ def getTBSSize(mcs, rbs, nred=12 * 14, layers=1, dmrs=12):
   return tbs, no_cbs
 
 
-def get_cbs(mcs, rbs):
-  A = PC_TBS[mcs][rbs - 1]
+def get_cbs(mcs, rbs, mini_slot=None):
+  if mini_slot is None:
+    A = PC_TBS[mcs][rbs - 1]
+  else:
+    A = PC_TBS_mini[mcs][rbs - 1]
   r = MCS[mcs]['R'] / 1024
   if A <= 292 or (A <= 3824 and r <= 0.67) or r <= 0.25:
     bg = 2
@@ -121,9 +134,9 @@ def getSDUPayload(size):
     return size - 3
 
 
-def get_required_rbs(mcs, buf_size, tti):
+def get_required_rbs(mcs, buf_size, tti, mini_slot=None):
   amount = buf_size * 8
-  pc = get_pc(tti)
+  pc = get_pc(tti, mini_slot)
   if amount == 0:
     return 0
   if amount > pc[mcs][-1]:
@@ -133,15 +146,17 @@ def get_required_rbs(mcs, buf_size, tti):
   return rb
 
 
-def get_tbs(mcs, rbs, tti):
-  pc = get_pc(tti)
+def get_tbs(mcs, rbs, tti, mini_slot=None):
+  pc = get_pc(tti, mini_slot=mini_slot)
   assert mcs in pc and rbs <= len(pc[mcs])
   return pc[mcs][rbs-1]
 
 
-def get_pc(tti=0.001):
+def get_pc(tti=0.001, mini_slot=None):
   pc = None
-  if tti == 0.001:
+  if mini_slot is not None:
+    pc = PC_TBS_mini
+  elif tti == 0.001:
     pc = PC_TBS
   elif tti < 0.0002:
     pc = PC_TBS_short
@@ -181,8 +196,8 @@ def getRXProbability(snr, mcs, tbs, symbol_time=10 ** -3 / 14, bandwidth=15 * 10
   return (1 - ber) ** tbs
 
 
-def getShannonRxProbability(snr, mcs, rbs):
-  K, _, _, _, _, C = get_cbs(mcs, rbs)
+def getShannonRxProbability(snr, mcs, rbs, mini_slot=None):
+  K, _, _, _, _, C = get_cbs(mcs, rbs, mini_slot)
   snr_lin = 10 ** (snr / 10)
   exponent = -1.5 * snr_lin / (2 ** MCS[mcs]['se'] - 1)
   ber = np.exp(exponent) / 5

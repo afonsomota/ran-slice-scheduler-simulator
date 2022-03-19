@@ -7,11 +7,12 @@ import Util
 
 FB_SIZE = 100
 MV_STEP = 0.01
+NO_PROCESSES = 16
 
 
 class HarqProcesses:
 
-  def __init__(self, ue, max_rv=3, no_processes=16, response_time=4, tti=0.001):
+  def __init__(self, ue, max_rv=3, no_processes=NO_PROCESSES, response_time=4, tti=0.001):
     self.processes = {}
     self.max_rv = max_rv
     self.no_processes = no_processes
@@ -34,11 +35,12 @@ class HarqProcesses:
       self.processes[pid] = {'rv': 0, 'size': size, 'pid': pid, 'mcs': mcs, 'packets': packets}
     proc = self.processes[pid]
     for type in packets:
-      assert len(packets[type]) == len(proc['packets'][type])
-      for i,pkt in enumerate(packets[type]):
-        assert pkt['id'] == proc['packets'][type][i]['id'], "IDs %d %d" %(pkt['id'],proc['packets'][type][i]['id'])
+      assert len(packets[type]) == len(proc['packets'][type]), f"{packets[type]} AND {proc['packets'][type]}"
+      for i, pkt in enumerate(packets[type]):
+        assert pkt['id'] == proc['packets'][type][i]['id'], "IDs %d %d" % (pkt['id'], proc['packets'][type][i]['id'])
         if type == 'segmented':
-          assert pkt['no_segments'] == proc['packets'][type][i]['no_segments'],"Segments %d %d"%(pkt['no_segments'],proc['packets'][type][i]['no_segments'])
+          assert pkt['no_segments'] == proc['packets'][type][i]['no_segments'], "Segments %d %d" % (
+            pkt['no_segments'], proc['packets'][type][i]['no_segments'])
     assert proc['size'] == size, "%d: %d vs %d and %d vs %d" % (self.ue.id, proc['mcs'], mcs, proc['size'], size)
     proc['rv'] += 1
     if proc['rv'] == self.max_rv:
@@ -59,8 +61,8 @@ class HarqProcesses:
       '''
     rtxs = []
     for pid in self.processes:
-      if self.processes[pid]['rtx'] == ts:
-        #print(self.ue.id,self.processes[pid]['rtx'],self.processes[pid])
+      if np.isclose(self.processes[pid]['rtx'], ts) or self.processes[pid]['rtx'] < ts:
+        # print(self.ue.id,self.processes[pid]['rtx'],self.processes[pid])
         rtxs.append(self.processes[pid])
     if len(rtxs) > 0:
       return True, rtxs
@@ -70,7 +72,8 @@ class HarqProcesses:
 
 class UE:
 
-  def __init__(self, ue_id, sim, sli, traffic_type='full_buffer', params=None, movement=None, start_ts=0, generator = None):
+  def __init__(self, ue_id, sim, sli, traffic_type='full_buffer', params=None, movement=None, start_ts=0,
+               generator=None):
     self.id = ue_id
     self.type = traffic_type
     self.params = params
@@ -85,20 +88,21 @@ class UE:
     self.ts = start_ts
     self.logging = False
     if generator is not None:
-      #self.traffic_generator = np.random.Generator(np.random.PCG64(params['traffic_seed']))
+      # self.traffic_generator = np.random.Generator(np.random.PCG64(params['traffic_seed']))
       self.traffic_generator = generator
     else:
       self.traffic_generator = np.random.Generator(np.random.PCG64())
     if 'start' not in params:
       self.calculateNext()
     else:
-      self.next = start_ts + params['start']/self.tti
+      self.next = start_ts + params['start'] / self.tti
     self.slice = sli
-    self.sinr = params.get('sinr', 30)
+    self.sinr = params.get('sinr', 80)
     self.metrics = {
       'sinr': Util.FineArray(self.sim.conf['sinr_store_window']),
       'mcs': Util.FineArray(self.sim.conf['sinr_store_window']),
       'packets': {},
+      'rejected-packets': {},
       'retx': {'count': 0},
       'slice': sli.id
     }
@@ -110,7 +114,10 @@ class UE:
     else:
       self.buffer = []
       assert params != None
-    self.harqProcesses = HarqProcesses(self)
+    if self.sim.conf.get('mini-slot', False) and self.slice.type == 'P':
+      self.harqProcesses = HarqProcesses(self, response_time=2. / 7)
+    else:
+      self.harqProcesses = HarqProcesses(self)
     self.active = True
     self.mv_index = 0
     self.movement = None
@@ -130,7 +137,7 @@ class UE:
           continue
         if total_time == 0:
           self.movement = mov_file
-          print("Initial file UE id %d, file %s, lines %d" % (self.id, self.movement.name,no_lines))
+          print("Initial file UE id %d, file %s, lines %d" % (self.id, self.movement.name, no_lines))
           self.sinr = self.getNextSINR()
         else:
           print("Added file UE id %d, file %s, lines %d" % (self.id, self.movement.name, no_lines))
@@ -186,9 +193,9 @@ class UE:
       self.logging = True
     if self.active:
       if (('start' in self.params and global_ts < self.params['start']) or \
-        ('end' in self.params and global_ts > self.params['end'])):
+          ('end' in self.params and global_ts > self.params['end'])):
         self.active = False
-    elif not self. active and \
+    elif not self.active and \
         ('start' in self.params and global_ts > self.params['start']) and \
         ('end' in self.params and global_ts < self.params['end']):
       self.active = True
@@ -226,19 +233,18 @@ class UE:
 
     if len(self.metrics['sinr']) != 0:
       sinr_avg = statistics.mean(self.metrics['sinr'])
-      sinr_ci = 1.96*statistics.pstdev(self.metrics['sinr'])
+      sinr_ci = 1.96 * statistics.pstdev(self.metrics['sinr'])
     else:
       sinr_avg = 0
       sinr_ci = 0
 
-    return {'delivery': (delivery, 0), 'delay': delay, 'tp': tp, 'sinr': (sinr_avg,sinr_ci)}
+    return {'delivery': (delivery, 0), 'delay': delay, 'tp': tp, 'sinr': (sinr_avg, sinr_ci)}
 
   def calculateNext(self):
     last = self.next
     if not self.inside_burst and 'bursts' in self.params:
       self.triggerBurst()
     if self.type == 'full_buffer':
-      # TODO improve code design: ugly
       return
     elif self.type == 'poisson':
       if self.inside_burst:
@@ -259,7 +265,7 @@ class UE:
       if self.inside_burst:
         avg_int = self.params['bursts'][self.active_burst]['interval']
         self.burst_count += 1
-        #normalize jitter
+        # normalize jitter
         avg_jitter = avg_int * self.params['jitter'] / self.params['interval']
         if self.burst_count > self.params['bursts'][self.active_burst]['total']:
           self.inside_burst = False
@@ -267,22 +273,28 @@ class UE:
         avg_int = self.params['interval']
         avg_jitter = self.params['jitter']
       times = round((last - self.start_ts) / (avg_int / self.tti))
-      jitter = self.traffic_generator.uniform(-avg_jitter,avg_jitter)
+      jitter = self.traffic_generator.uniform(-avg_jitter, avg_jitter)
       self.next = (times + 1) * (avg_int / self.tti) + jitter / self.tti + self.start_ts
     else:
       assert 1 == 0
     assert self.next > last
     self.last = last
 
-  def tick(self):
-    self.ts += 1
+  def tick(self, ts=None):
+    last_ts = self.ts
+    if ts is None:
+      self.ts = int(self.ts + 1)
+    else:
+      self.ts += ts
     if self.type != 'full_buffer' and self.active and self.ts >= self.next:
       while self.next <= self.ts:
-        packet = {'size': self.getSize(), 'sent': self.next / self.tti / 1000, 'id': self.packet_id}
+        packet = {'size': self.getSize(), 'sent': self.next / self.tti / 1000, 'id': self.packet_id, 'new': True, 'on_hold': 0}
         self.calculateNext()
         self.buffer.append(packet)
         # self.metrics['packets'][self.packet_id] = packet.copy()
         self.packet_id += 1
+      for p in self.buffer:
+        p['on_hold'] += (self.ts - last_ts)
     self.sinr = self.getNextSINR()
 
   def getSize(self):
@@ -307,15 +319,21 @@ class UE:
         if 'admitted' not in p:
           admitted = True
           if 'admission' in self.slice.target:
+            assert 'new' in p and p['new'], f"{p}, {self.id}, {self.slice.id}, {self.slice.target}"
             admitted = self.slice.admission.filter_packet(p['size'])
           p['admitted'] = admitted
+          p['new'] = False
         if p['admitted']:
           key = 'size' if 'leftover' not in p else 'leftover'
           total += p[key] + Util.getSDUHeader(p[key])
         else:
           print("PACKET DISCARDED ", self.id, self.ts, p['id'])
           self.registerFailure({'full': [p], 'segmented': []})
+          p_copy = p.copy()
+          self.metrics['rejected-packets'][p['id']] = p_copy
           buffer.remove(p)
+      for p in self.buffer:
+        assert p['new'] is False
       return total
 
   def popBuffer(self, amount):
@@ -360,7 +378,7 @@ class UE:
       else:
         left = amount - sent
         body_sent = left - (size - p_size)
-        #no room for header
+        # no room for header
         if body_sent <= 0:
           break
         sent = amount
@@ -381,16 +399,17 @@ class UE:
   def checkRetransmissions(self):
     return self.harqProcesses.checkRetransmissions(self.ts)
 
-  def registerPacketSuccess(self,packet):
+  def registerPacketSuccess(self, packet):
     if self.active and self.logging:
       self.slice.updatePacketMetrics(packet)
 
-  def registerSuccess(self, hp_id, packets):
-    if hp_id != None:
+  def registerSuccess(self, hp_id, packets, mini_slot=None):
+    if hp_id is not None:
       self.harqProcesses.registerSuccess(hp_id)
     complete = False
     for p in packets['full']:
-      self.metrics['packets'][p['id']]['recv'] = self.ts * self.sim.tti * 1000 + self.harqProcesses.response_time * self.sim.tti * 1000
+      self.metrics['packets'][p['id']][
+        'recv'] = self.ts * self.sim.tti * 1000 + self.harqProcesses.response_time * self.sim.tti * 1000
       self.registerPacketSuccess(self.metrics['packets'][p['id']])
     for p in packets['segmented']:
       if 'segments_received' not in self.segmented_packets[p['id']]:
@@ -400,10 +419,10 @@ class UE:
       self.segmented_packets[p['id']]['segments_received_lst'].append(p['segment'])
       assert self.segmented_packets[p['id']]['segments_received'] <= p['size']
       if self.segmented_packets[p['id']]['segments_received'] == p['size']:
-        self.metrics['packets'][p['id']]['recv'] = self.ts * self.sim.tti * 1000 + self.harqProcesses.response_time * self.sim.tti * 1000
+        self.metrics['packets'][p['id']][
+          'recv'] = self.ts * self.sim.tti * 1000 + self.harqProcesses.response_time * self.sim.tti * 1000
         self.registerPacketSuccess(self.metrics['packets'][p['id']])
         del self.segmented_packets[p['id']]
-
 
   def registerFailure(self, packets):
     if self.active and self.logging:
@@ -414,8 +433,7 @@ class UE:
               self.slice.updatePacketMetrics(self.metrics['packets'][p['id']])
             self.failed_packets.add(p['id'])
 
-
-  def dataTxRx(self, snr, mcs, size, rbs, hp=None):
+  def dataTxRx(self, snr, mcs, size, rbs, hp=None, mini_slot=None):
     if hp is None:
       sent, packets = self.popBuffer(size)
       hp_pid = None
@@ -424,10 +442,15 @@ class UE:
       sent = None
       hp_pid = hp['pid']
 
-    succ_prob = Util.getShannonRxProbability(snr, mcs, rbs)
+    succ_prob = Util.getShannonRxProbability(snr, mcs, rbs, mini_slot)
+    # print(succ_prob)
     if np.random.uniform() >= succ_prob:
-      if hp == None:
-        is_final = self.harqProcesses.registerFailure(int(self.ts) % 16, packets, rbs, mcs, self.ts)
+      if hp is None:
+        if mini_slot is None:
+          hp_pid = int(self.ts) % NO_PROCESSES
+        else:
+          hp_pid = round(self.ts*7) % NO_PROCESSES
+        is_final = self.harqProcesses.registerFailure(hp_pid, packets, rbs, mcs, self.ts)
       else:
         # TODO block if pid occupied
         is_final = self.harqProcesses.registerFailure(hp_pid, packets, rbs, mcs, self.ts)
@@ -435,5 +458,14 @@ class UE:
         self.registerFailure(packets)
       return False, sent
     else:
-      self.registerSuccess(hp_pid, packets)
+      self.registerSuccess(hp_pid, packets,  mini_slot=None)
       return True, sent
+
+  def failed_by_puncture(self, mcs, size, rbs, mini_slot=None):
+    sent, packets = self.popBuffer(size)
+    if mini_slot is None:
+      hp_pid = int(self.ts) % NO_PROCESSES
+    else:
+      hp_pid = round(self.ts * 7) % NO_PROCESSES
+    self.harqProcesses.registerFailure(hp_pid , packets, rbs, mcs, self.ts)
+    return False, sent

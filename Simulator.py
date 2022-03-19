@@ -767,7 +767,9 @@ class Simulation:
     frame = -int(self.conf['warmup'] / self.tti)
     logging.info("Start simulation")
     while True:
-      logging.info("TTI %d", frame)
+      if frame % 1000 == 0:
+        print(frame)
+      logging.info("TTI %s", f"{frame}/{no_tti}")
       for sli in self.slices.values():
         sli.tick()
       for u in self.ues.values():
