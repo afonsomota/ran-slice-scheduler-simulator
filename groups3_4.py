@@ -9,6 +9,8 @@ import scipy
 import pickle
 from functools import reduce
 from NRTables import PC_TBS
+import os
+
 
 
 def fill_dls_tps(dls, tps, ue_metrics):
@@ -41,7 +43,17 @@ def makeCDFLine(list, bins, range):
 
 if __name__ == '__main__':
 
+  simulation_dir = "groups3_4"
+
+  if simulation_dir is not None:
+    if not os.path.exists(simulation_dir):
+      os.makedirs(simulation_dir)
+    os.chdir(simulation_dir)
+
   mpl.rcParams['legend.fontsize'] = 9
+
+  mpl.rcParams['pdf.fonttype'] = 42
+  mpl.rcParams['ps.fonttype'] = 42
 
   urllc_target = {'delay': 5, 'reliability': 10 ** -5, 'primary': 'delay'}
   embb_target = {'system_throughput': PC_TBS[10][26], 'throughput_average_time': 100, 'delay': 100,
@@ -99,12 +111,16 @@ if __name__ == '__main__':
   s1_tps = []
   s2_tps = []
   s0_tps = []
-  mcss = [(None, 10.5), (None, 14.5), (None, 19.5), (10, 80)]
+  mcss = [(None, 10.5), (None, 14.5), (10, 80)]
 
   targets_per_ue = {}
   for iuec, uec in enumerate(counts):
     targets_per_mcs = {}
     for idx, (mcs, sinr) in enumerate(mcss):
+
+      if uec != 6 and mcs is None:
+        print(uec, mcs, "skipped!")
+        continue
 
       traffic_seed = np.random.randint(0, 12000, (3, 6))
 
@@ -372,7 +388,7 @@ if __name__ == '__main__':
 
       plt.subplots_adjust(bottom=0.35)
       ax.legend(loc='upper center', bbox_to_anchor=(leg_x, leg_y), ncol=3, columnspacing=1)
-      fig.savefig(fname, bbox_inches='tight')
+      fig.savefig(fname+".pdf", format="pdf", bbox_inches='tight')
       plt.close(fig)
 
       if uec == 8 and mcs == 10:
@@ -402,7 +418,7 @@ if __name__ == '__main__':
         ax.errorbar(bad_x, bad, lw=2, c = 'brown', yerr=0, label="Slice 3")
         plt.subplots_adjust(bottom=0.35)
         ax.legend(loc='upper center', bbox_to_anchor=(leg_x, leg_y), ncol=3, columnspacing=1)
-        fig.savefig(fname, bbox_inches='tight')
+        fig.savefig(fname+".svg", format="svg", bbox_inches='tight')
         plt.close(fig)
 
       targets_per_mcs[mcs] = {'pa': {}, 'npa': {}, 'up': {}}
@@ -459,7 +475,7 @@ if __name__ == '__main__':
       # plt.show()
       ax.set_xlim(3, 20)
       ax.set_ylim(0, 1.05)
-      fig.savefig(fname, bbox_inches='tight')
+      fig.savefig(fname+".pdf", format="pdf", bbox_inches='tight')
       plt.close(fig)
 
       # Throughput CDF
@@ -475,7 +491,7 @@ if __name__ == '__main__':
         ax.errorbar(x_tps, y, fmt=slice_styles[s], yerr=err, lw=1, label="%s non-PA" % slice_labels[s])
 
       ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05), ncol=3)
-      # fig.savefig(fname,bbox_inches='tight')
+      # fig.savefig(fname+".pdf", format="pdf",bbox_inches='tight')
       # plt.show()
 
       plt.close(fig)
@@ -493,7 +509,7 @@ if __name__ == '__main__':
         ax.errorbar(x_dtps, y, fmt=slice_styles[s], yerr=err, lw=1, label="%s non-PA" % slice_labels[s])
 
       ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05), ncol=3)
-      # fig.savefig(fname,bbox_inches='tight')
+      # fig.savefig(fname+".pdf", format="pdf",bbox_inches='tight')
       # plt.show()
 
       plt.close(fig)
@@ -524,7 +540,7 @@ if __name__ == '__main__':
       handles, labels = Util.orderLegend(handles, labels, [2, 3, 4, 5, 6, 7,  8, 9, 10, 0, 1 ])
       plt.subplots_adjust(bottom=0.35)
       ax.legend(handles, labels, loc='upper center', bbox_to_anchor=(leg_x, leg_y), ncol=2, columnspacing=0.5)
-      fig.savefig(fname, bbox_inches='tight')
+      fig.savefig(fname+".pdf", format="pdf", bbox_inches='tight')
       # plt.show()
 
       plt.close(fig)
@@ -546,12 +562,12 @@ if __name__ == '__main__':
       # ax.axvline(x=8,c='y',ls='--',lw=1)
 
       ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05), ncol=3)
-      # fig.savefig(fname,bbox_inches='tight')
+      # fig.savefig(fname+".pdf", format="pdf",bbox_inches='tight')
       # plt.show()
 
       plt.close(fig)
 
-    if len(mcss) > 1:
+    if len(mcss) > 1 and len(targets_per_mcs) > 1:
       fname = "mcs-target-%d" % uec
       fig, axs = plt.subplots(1, len(targets_per_mcs))
       fig.set_figheight(4)
@@ -578,12 +594,12 @@ if __name__ == '__main__':
       fig.legend(handles, labels, loc='lower center',  # bbox_to_anchor=(0, 0),
                  shadow=True, ncol=9)
       plt.subplots_adjust(bottom=0.35)
-      fig.savefig(fname, bbox_inches='tight')
+      fig.savefig(fname+".pdf", format="pdf", bbox_inches='tight')
       # plt.show()
 
     targets_per_ue[uec] = targets_per_mcs[10]
 
-  if len(targets_per_ue) > 1:
+  if len(targets_per_ue) > 1 and len(targets_per_mcs) > 1:
     fname = "ue-target"
     fig, axs = plt.subplots(1, len(targets_per_ue))
     fig.set_figheight(4)
@@ -610,5 +626,5 @@ if __name__ == '__main__':
     fig.legend(handles, labels, loc='lower center',  # bbox_to_anchor=(0, 0),
                shadow=True, ncol=9)
     plt.subplots_adjust(bottom=0.25)
-    fig.savefig(fname, bbox_inches='tight')
+    fig.savefig(fname+".pdf", format="pdf", bbox_inches='tight')
     # plt.show()

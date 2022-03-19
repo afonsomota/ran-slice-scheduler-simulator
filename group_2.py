@@ -6,7 +6,10 @@ import numpy as np
 from scipy import stats
 import pickle
 from NRTables import PC_TBS
-import scipy
+import os
+import matplotlib
+matplotlib.rcParams['pdf.fonttype'] = 42
+matplotlib.rcParams['ps.fonttype'] = 42
 
 def plot_time_ipunt_traffic(slice_styles, slice_labels, sizes,  plt, bins= 100):
   # input traffic time series
@@ -270,8 +273,15 @@ def fill_dls_tps(dls, tps, ue_metrics):
         if tps is not None: tps[s].append(tp)
   return max_dl, max_tp
 
+
 if __name__ == '__main__':
 
+  simulation_dir = "group_2"
+
+  if simulation_dir is not None:
+    if not os.path.exists(simulation_dir):
+      os.makedirs(simulation_dir)
+    os.chdir(simulation_dir)
 
   slice_styles = {
     1: 'g-',
@@ -415,14 +425,14 @@ if __name__ == '__main__':
             Util.plotCDF(delays[s],ax,slice_styles[s],slice_labels[s])
         #plt.show()
         ax.legend(loc='upper center', bbox_to_anchor=(0.47, -0.2), ncol=3, columnspacing=1)
-        fig.savefig(fname)
+        fig.savefig(fname+".pdf", format="pdf", bbox_inches='tight')
         plt.close(fig)
 
         fname = "delay-time-bc_%d-tg_%d"%(bc,tg)
         fig, ax = plt.subplots()
         lines[measures['delay'],ibc,itg] = plot_time_delay(slice_styles,slice_labels,time_delays,ax,bins)
         ax.legend(loc='upper center', bbox_to_anchor=(0.47, -0.2), ncol=3, columnspacing=1)
-        fig.savefig(fname)
+        fig.savefig(fname+".pdf", format="pdf", bbox_inches='tight')
         plt.close(fig)
 
         total = 0
@@ -447,7 +457,7 @@ if __name__ == '__main__':
         fig, ax = plt.subplots()
         lines[measures['delay-zoom'], ibc, itg] = plot_time_delay(slice_styles, slice_labels, time_delays, ax, bins,x_interval=[7000,9000])
         ax.legend(loc='upper center', bbox_to_anchor=(0.47, -0.2), ncol=3, columnspacing=1)
-        fig.savefig(fname)
+        fig.savefig(fname+".pdf", format="pdf", bbox_inches='tight')
         plt.close(fig)
 
 
@@ -455,35 +465,35 @@ if __name__ == '__main__':
       #  fig, ax = plt.subplots()
       #  lines[measures['delay-xzoom'], ibc, itg] = plot_time_delay(slice_styles, slice_labels, time_delays, ax, bins,x_interval=[7500,7750],aggregate=False)
       #  ax.legend(loc='upper center', bbox_to_anchor=(0.47, -0.2), ncol=3, columnspacing=1)
-      #  fig.savefig(fname)
+      #  fig.savefig(fname+".pdf", format="pdf", bbox_inches='tight')
       #  plt.close(fig)
 
         fname = "kbps-time-bc_%d-tg_%d"%(bc,tg)
         fig, ax = plt.subplots()
         lines[measures['throughput'],ibc,itg] = plot_time_sched_kbps(slice_styles,slice_labels,results,ax,bins)
         ax.legend(loc='upper center', bbox_to_anchor=(0.47, -0.2), ncol=3, columnspacing=1)
-        #fig.savefig(fname)
+        #fig.savefig(fname+".pdf", format="pdf", bbox_inches='tight')
         plt.close(fig)
 
         fname = "kbps-time-zoom-bc_%d-tg_%d" % (bc, tg)
         fig, ax = plt.subplots()
         lines[measures['throughput-zoom'], ibc, itg] = plot_time_sched_kbps(slice_styles, slice_labels, results, ax, bins,x_interval=[7000,9000],slice_tgs={0:tg, 1:tg,2:tg})
         ax.legend(loc='upper center', bbox_to_anchor=(0.47, -0.2), ncol=3, columnspacing=1)
-        #fig.savefig(fname)
+        #fig.savefig(fname+".pdf", format="pdf", bbox_inches='tight')
         plt.close(fig)
 
         fname = "excesses-time-bc_%d-tg_%d"%(bc,tg)
         fig, ax = plt.subplots()
         lines[measures['excesses'],ibc,itg] = plot_time_excesses(slice_styles,slice_labels,results,ax,bins)
         ax.legend(loc='upper center', bbox_to_anchor=(0.47, -0.2), ncol=3, columnspacing=1)
-        #fig.savefig(fname)
+        #fig.savefig(fname+".pdf", format="pdf", bbox_inches='tight')
         plt.close(fig)
 
         fname = "overuses-time-bc_%d-tg_%d"%(bc,tg)
         fig, ax = plt.subplots()
         lines[measures['overuses'],ibc,itg] = plot_time_overuses(slice_styles,slice_labels,results,ax,bins)
         ax.legend(loc='upper center', bbox_to_anchor=(0.47, -0.2), ncol=3, columnspacing=1)
-        #fig.savefig(fname)
+        #fig.savefig(fname+".pdf", format="pdf", bbox_inches='tight')
         plt.close(fig)
 
 
@@ -511,7 +521,7 @@ if __name__ == '__main__':
 
         fname = "bundle-time-bc_%d-tg_%d"%(bc,tg)
 
-        fig.savefig(fname,bbox_inches='tight')
+        fig.savefig(fname+".pdf", format="pdf", bbox_inches='tight')
         plt.close(fig)
 
   if not loaded:
@@ -591,7 +601,7 @@ if __name__ == '__main__':
   ax.set_ylabel("Delay (ms)")
   plt.subplots_adjust(bottom=0.35)
   ax.legend(loc='upper center', bbox_to_anchor=(leg_x, leg_y), ncol=3, columnspacing=1, prop={'size': leg_size})
-  fig.savefig(fname, bbox_inches='tight')
+  fig.savefig(fname+".pdf", format="pdf", bbox_inches='tight')
   ax.set_ylim(0,22)
   #plt.show()
   plt.close(fig)
@@ -625,7 +635,7 @@ if __name__ == '__main__':
   handles, labels = ax.get_legend_handles_labels()
   ax.axhline(PC_TBS[10][slice_conf[0]['params']['mAR']-1]/1000,c='r',ls='--',lw=1,label='eMBB mAR (MCS:10)')
   ax.legend(loc='upper center', bbox_to_anchor=(leg_x, leg_y), ncol=3, columnspacing=0.5, prop={'size': leg_size})
-  fig.savefig(fname, bbox_inches='tight')
+  fig.savefig(fname+".pdf", format="pdf", bbox_inches='tight')
   #plt.show()
   plt.close(fig)
 
@@ -657,7 +667,7 @@ if __name__ == '__main__':
   ax.set_ylabel("Delay (ms)")
   plt.subplots_adjust(bottom=0.35)
   ax.legend(loc='upper center', bbox_to_anchor=(leg_x, leg_y), ncol=3, columnspacing=1, prop={'size': leg_size})
-  fig.savefig(fname, bbox_inches='tight')
+  fig.savefig(fname+".pdf", format="pdf", bbox_inches='tight')
   ax.set_ylim(0,22)
   #plt.show()
   plt.close(fig)
@@ -694,7 +704,7 @@ if __name__ == '__main__':
   handles, labels = ax.get_legend_handles_labels()
   ax.axhline(PC_TBS[10][slice_conf[0]['params']['mAR']-1]/1000,c='r',ls='--',lw=1,label='eMBB mAR (MCS:10)')
   ax.legend(loc='upper center', bbox_to_anchor=(leg_x, leg_y), ncol=3, columnspacing=0.5, prop={'size': leg_size})
-  fig.savefig(fname, bbox_inches='tight')
+  fig.savefig(fname+".pdf", format="pdf", bbox_inches='tight')
   #plt.show()
   plt.close(fig)
 
